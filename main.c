@@ -25,17 +25,13 @@ object p1;
 object foods[NUM_OF_FOOD];
 object obstructions[NUM_OF_OBSTRUCTION];
 
-bool set_object(object *o, int x, int y) {
-	int new_pos = -1;
-	int old_pos = -1;
+int flatten(int x, int y) {
+	return y == 1 ? x : ((y-1)*MAX_X)+x;
+}
 
-	if(y == 1) {
-		new_pos = x;
-		old_pos = o->x;
-	} else {
-		new_pos = ((y-1)*MAX_X)+x;
-		old_pos = ((o->y-1)*MAX_X)+o->x;
-	}
+bool set_object(object *o, int x, int y) {
+	int new_pos = flatten(x,y);
+	int old_pos = flatten(o->x, o->y);
 
 	if(map[new_pos] == NULL) {
 		map[new_pos] = o;
@@ -53,7 +49,7 @@ bool set_object(object *o, int x, int y) {
 }
 
 void draw_scene() {
-	num_food = 0;
+	int num_food = 0;
 	for(int i = 0;i < MAX_Y*MAX_Y;i++) {
 		if(map[i] == NULL) {
 			continue;
@@ -78,6 +74,8 @@ void draw_scene() {
 	if(num_food <= 0) {
 		clear(); // Clear the screen
 		mvprintw(10, 10, "%s", "Winner!");
+	} else {
+		mvprintw(0,0,"%s %d", "food remaining = ", num_food);
 	}
 
 }
@@ -94,11 +92,10 @@ int main() {
     int ch;
 
 	// Initialize player start
-	if(set_object(&p1, 1, 1)) {
-		p1.x = 1;
-		p1.y = 1;
-		p1.t = PLAYER;
-	}
+	p1.t = PLAYER;
+	p1.x = 1;
+	p1.y = 1;
+	set_object(&p1, 1, 1);
 
 
 	// Generate objects
