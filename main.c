@@ -8,6 +8,11 @@
 #define MAX_X 50
 #define MAX_Y 50
 
+/* TODO
+	- Convert int x,y into struct Point [x]
+	- Write unflatten function
+*/
+
 typedef enum {
 	PLAYER,
 	OBSTRUCTION,
@@ -16,12 +21,17 @@ typedef enum {
 
 typedef struct {
 	int x, y;
+} Point;
+
+typedef struct {
+	Point p;
 	Type t;
 } object;
 
-// x,y grid is mapped unto a 1 demensional array
+// x,y grid is mapped unto a 2 demensional array
 object *map[MAX_X * MAX_Y] = {NULL};
 object p1;
+object perimeter[(2*MAX_X)+(2*MAX_Y)];
 object foods[NUM_OF_FOOD];
 object obstructions[NUM_OF_OBSTRUCTION];
 
@@ -29,9 +39,16 @@ int flatten(int x, int y) {
 	return y == 1 ? x : ((y-1)*MAX_X)+x;
 }
 
+Point unflatten(int z) {
+	Point p;
+	p.x = 1;
+	p.y = 1;
+	return p;
+}
+
 bool set_object(object *o, int x, int y) {
 	int new_pos = flatten(x,y);
-	int old_pos = flatten(o->x, o->y);
+	int old_pos = flatten(o->p.x, o->p.y);
 
 	if(map[new_pos] == NULL) {
 		map[new_pos] = o;
@@ -56,13 +73,13 @@ void draw_scene() {
 		} else {
 			switch(map[i]->t) {
 				case PLAYER:
-					mvprintw(map[i]->y, map[i]->x, "t");
+					mvprintw(map[i]->p.y, map[i]->p.x, "t");
 					break;
 				case OBSTRUCTION:
-					mvprintw(map[i]->y, map[i]->x, "O");
+					mvprintw(map[i]->p.y, map[i]->p.x, "O");
 					break;
 				case FOOD:
-					mvprintw(map[i]->y, map[i]->x, "x");
+					mvprintw(map[i]->p.y, map[i]->p.x, "x");
 					num_food++;
 					break;
 				default:
@@ -93,25 +110,24 @@ int main() {
 
 	// Initialize player start
 	p1.t = PLAYER;
-	p1.x = 1;
-	p1.y = 1;
+	p1.p.x = 1;
+	p1.p.y = 1;
 	set_object(&p1, 1, 1);
-
 
 	// Generate objects
 	for(int i = 0; i < NUM_OF_OBSTRUCTION; i++) {
 		obstructions[i].t = OBSTRUCTION;
-		obstructions[i].x = rand() % MAX_X;
-		obstructions[i].y = rand() % MAX_Y;
-		set_object(&obstructions[i], obstructions[i].x, obstructions[i].y);
+		obstructions[i].p.x = rand() % MAX_X;
+		obstructions[i].p.y = rand() % MAX_Y;
+		set_object(&obstructions[i], obstructions[i].p.x, obstructions[i].p.y);
 	}
 
 	// Generate foods
 	for(int i = 0; i < NUM_OF_FOOD; i++) {
 		foods[i].t = FOOD;
-		foods[i].x = rand() % MAX_X;
-		foods[i].y = rand() % MAX_Y;
-		set_object(&foods[i], foods[i].x, foods[i].y);
+		foods[i].p.x = rand() % MAX_X;
+		foods[i].p.y = rand() % MAX_Y;
+		set_object(&foods[i], foods[i].p.x, foods[i].p.y);
 	}
 	
 
@@ -122,20 +138,20 @@ int main() {
         // Update player position based on input
         switch (ch) {
             case KEY_UP:    
-		if(set_object(&p1, p1.x, p1.y-1))
-			p1.y--; 
+		if(set_object(&p1, p1.p.x, p1.p.y-1))
+			p1.p.y--; 
 		break;
             case KEY_DOWN:  
-		if(set_object(&p1, p1.x, p1.y+1))
-			p1.y++; 
+		if(set_object(&p1, p1.p.x, p1.p.y+1))
+			p1.p.y++; 
 		break;
             case KEY_LEFT:  
-		if(set_object(&p1, p1.x-1, p1.y))
-			p1.x--; 
+		if(set_object(&p1, p1.p.x-1, p1.p.y))
+			p1.p.x--; 
 		break;
             case KEY_RIGHT: 
-		if(set_object(&p1, p1.x+1, p1.y))
-			p1.x++; 
+		if(set_object(&p1, p1.p.x+1, p1.p.y))
+			p1.p.x++; 
 		break;
         }
 
