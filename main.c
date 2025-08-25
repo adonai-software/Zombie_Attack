@@ -8,6 +8,7 @@
 #define NUM_OF_OBSTRUCTION 50
 #define NUM_OF_MONSTER 10
 #define NUM_OF_FOOD 5
+#define NUM_OF_POWER 2
 // #define max_x 50
 // #define max_y 50
 
@@ -20,7 +21,7 @@
 
 int max_x, max_y;
 
-typedef enum { PLAYER, OBSTRUCTION, FOOD, PERIMETER, MONSTER } Type;
+typedef enum { PLAYER, OBSTRUCTION, FOOD, PERIMETER, MONSTER, POWER } Type;
 
 typedef struct {
   int x, y;
@@ -39,12 +40,15 @@ Object *perimeter;
 Object foods[NUM_OF_FOOD];
 Object obstructions[NUM_OF_OBSTRUCTION];
 Object monsters[NUM_OF_MONSTER];
-Object powerup[NUM_OF_POWER_UP];
+Object powers[NUM_OF_POWER];
 
 int smallest_z = 0;
 int largest_z = 0;
 int num_food = 0;
 int num_lives = 2;
+bool power_enabled = false;
+pthread_mutex_t power_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t power_cond = PTHREAD_COND_INITIALIZER;
 
 int flatten(int x, int y) { return y == 1 ? x : ((y - 1) * max_x) + x; }
 
@@ -88,6 +92,14 @@ bool set_object(Object *o, int x, int y) {
     num_food--;
     return true;
     // player + 1 food
+  } else if (o->t == PLAYER && map[new_pos]->t == POWER) {
+    map[new_pos] = o;
+    map[old_pos] = NULL;
+    pthread_mutex_lock(&power_mutex);
+    power_enabled = true;
+    pthread_mutex_unlock(&power_mutex);
+    pthread_cond_signal(&power_cond);
+    return true;
   } else if ((o->t == MONSTER && map[new_pos]->t == PLAYER) ||
              (o->t == PLAYER && map[new_pos]->t == MONSTER)) {
     num_lives--;
@@ -119,7 +131,11 @@ void draw_scene() {
           mvprintw(map[i]->p.y, map[i]->p.x, "X");
           break;
         case MONSTER:
-          mvprintw(map[i]->p.y, map[i]->p.x, "M");
+          if (!power_enabled) mvprintw(map[i]->p.y, map[i]->p.x, "M");
+          else mvprintw(map[i]->p.y, map[i]->p.x, "m");
+          break;
+        case POWER:
+          mvprintw(map[i]->p.y, map[i]->p.x, "p");
           break;
         default:
           break;
@@ -141,16 +157,26 @@ void draw_scene() {
 void *moving_monster(void *arg) {
   while (1) {
     pthread_mutex_lock(&map_mutex);
+    int new_x_pos, new_y_pos;
     for (int i = 0; i < NUM_OF_MONSTER; i++) {
       // Random movement
       // int new_x_pos = rand()%2==0 ? monsters[i].p.x+1 : monsters[i].p.x-1;
       // int new_y_pos = rand()%2==0 ? monsters[i].p.y+1 : monsters[i].p.y-1;
       // Inteligent movement
 
-      int new_x_pos =
-          monsters[i].p.x > p1.p.x ? monsters[i].p.x - 1 : monsters[i].p.x + 1;
-      int new_y_pos =
-          monsters[i].p.y > p1.p.y ? monsters[i].p.y - 1 : monsters[i].p.y + 1;
+      
+      if(!power_enabled) {
+        new_x_pos =
+            monsters[i].p.x > p1.p.x ? monsters[i].p.x - 1 : monsters[i].p.x + 1;
+        new_y_pos =
+            monsters[i].p.y > p1.p.y ? monsters[i].p.y - 1 : monsters[i].p.y + 1;
+      } else {
+        new_x_pos =
+            monsters[i].p.x > p1.p.x ? monsters[i].p.x + 1 : monsters[i].p.x - 1;
+        new_y_pos =
+            monsters[i].p.y > p1.p.y ? monsters[i].p.y + 1 : monsters[i].p.y - 1;
+
+      }
 
       if (set_object(&monsters[i], new_x_pos, new_y_pos)) {
         monsters[i].p.x = new_x_pos;
@@ -165,19 +191,17 @@ void *moving_monster(void *arg) {
   return NULL;
 }
 
-int main() {
-  initscr();             // Initialize ncurses
-  cbreak();              // Line buffering disabled
-  noecho();              // Don't echo input characters
-  keypad(stdscr, TRUE);  // Enable special keys
-  curs_set(0);           // Hide cursor
+void *power_timer(void *arg) {
+  while(1) {
+    pthread_mutex_lock(&power_mutex);
+    pthread_cond_wait(&power_cond, &power_mutex);
+    usleep(5000000); // 5 seconds
+    power_enabled = false;
+    pthread_mutex_unlock(&power_mutex);
+  }
+}
 
-  nodelay(stdscr, TRUE);  // makes getch non-blocking
-  srand(time(NULL));
-  getmaxyx(stdscr, max_y, max_x);
-  map = calloc(max_x * max_y, sizeof(Object *));
-  perimeter = malloc(((2 * max_x) + (2 * max_y)) * sizeof(Object));
-  largest_z = flatten(max_x, max_y);
+void init_game() {
 
   // Initialize player start
   p1.t = PLAYER;
@@ -226,14 +250,6 @@ int main() {
     num_of_per++;
   }
 
-  // Generate objects
-  for (int i = 0; i < NUM_OF_OBSTRUCTION; i++) {
-    obstructions[i].t = OBSTRUCTION;
-    obstructions[i].p.x = rand() % max_x;
-    obstructions[i].p.y = rand() % max_y;
-    set_object(&obstructions[i], obstructions[i].p.x, obstructions[i].p.y);
-  }
-
   // Generate foods
   for (int i = 0; i < NUM_OF_FOOD; i++) {
     foods[i].t = FOOD;
@@ -242,7 +258,15 @@ int main() {
     if (set_object(&foods[i], foods[i].p.x, foods[i].p.y)) num_food++;
   }
 
-  // Generate foods
+  // Generate powers
+  for (int i = 0; i < NUM_OF_POWER; i++) {
+    powers[i].t = POWER;
+    powers[i].p.x = rand() % max_x;
+    powers[i].p.y = rand() % max_y;
+    set_object(&powers[i], powers[i].p.x, powers[i].p.y);
+  }
+
+  // Generate monsters
   for (int i = 0; i < NUM_OF_MONSTER; i++) {
     monsters[i].t = MONSTER;
     monsters[i].p.x = rand() % max_x;
@@ -250,10 +274,35 @@ int main() {
     set_object(&monsters[i], monsters[i].p.x, monsters[i].p.y);
   }
 
-  pthread_t mm;
-  int thread_id = 1;
+  // Generate obstructions
+  for (int i = 0; i < NUM_OF_OBSTRUCTION; i++) {
+    obstructions[i].t = OBSTRUCTION;
+    obstructions[i].p.x = rand() % max_x;
+    obstructions[i].p.y = rand() % max_y;
+    set_object(&obstructions[i], obstructions[i].p.x, obstructions[i].p.y);
+  }
+}
 
-  pthread_create(&mm, NULL, moving_monster, &thread_id);
+int main() {
+  initscr();             // Initialize ncurses
+  cbreak();              // Line buffering disabled
+  noecho();              // Don't echo input characters
+  keypad(stdscr, TRUE);  // Enable special keys
+  curs_set(0);           // Hide cursor
+
+  nodelay(stdscr, TRUE);  // makes getch non-blocking
+  srand(time(NULL));
+  getmaxyx(stdscr, max_y, max_x);
+  map = calloc(max_x * max_y, sizeof(Object *));
+  perimeter = malloc(((2 * max_x) + (2 * max_y)) * sizeof(Object));
+  largest_z = flatten(max_x, max_y);
+  pthread_t mm, pt;
+  int t1 = 1;
+  int t2 = 2;
+
+  init_game();
+  pthread_create(&mm, NULL, moving_monster, &t1);
+  pthread_create(&pt, NULL, power_timer, &t2);
 
   bool exit_game = false;
   while (!exit_game) {  // Game loop, exit on 'q'
@@ -291,6 +340,7 @@ int main() {
     usleep(5000);
   }
 
+  pthread_join(pt, NULL);
   pthread_join(mm, NULL);
 
   endwin();  // Clean up ncurses
