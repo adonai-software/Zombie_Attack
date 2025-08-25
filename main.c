@@ -152,8 +152,14 @@ void* moving_monster(void* arg) {
 	while(1) {
 		pthread_mutex_lock(&map_mutex);
 		for(int i = 0; i < NUM_OF_MONSTER;i++) {
-			int new_x_pos = rand()%2==0 ? monsters[i].p.x+1 : monsters[i].p.x-1;
-			int new_y_pos = rand()%2==0 ? monsters[i].p.y+1 : monsters[i].p.y-1;
+			// Random movement
+			//int new_x_pos = rand()%2==0 ? monsters[i].p.x+1 : monsters[i].p.x-1;
+			//int new_y_pos = rand()%2==0 ? monsters[i].p.y+1 : monsters[i].p.y-1;
+			// Inteligent movement
+
+			int new_x_pos = monsters[i].p.x > p1.p.x ? monsters[i].p.x-1 : monsters[i].p.x+1;
+			int new_y_pos = monsters[i].p.y > p1.p.y ? monsters[i].p.y-1 : monsters[i].p.y+1;
+
 			if(set_object(&monsters[i], new_x_pos, new_y_pos)) {
 				monsters[i].p.x = new_x_pos;
 				monsters[i].p.y = new_y_pos;
