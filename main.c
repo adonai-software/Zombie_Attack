@@ -9,14 +9,13 @@
 #define NUM_OF_MONSTER 10
 #define NUM_OF_FOOD 5
 #define NUM_OF_POWER 2
-// #define max_x 50
-// #define max_y 50
-
 /* TODO
         - Convert int x,y into struct Point [x]
         - Write unflatten function [x]
         - Add perimeter [x]
-        - Make monsters move
+        - Make monsters move [x]
+        - start menu
+        - Add Pause and banner middle
 */
 
 int max_x, max_y;
@@ -32,7 +31,8 @@ typedef struct {
   Type t;
 } Object;
 
-// x,y grid is mapped unto a 2 demensional array
+// Points x,y is mapped unto a 1-dimentional array
+// Use flatten(x,y) to get mapping
 Object **map = {NULL};
 pthread_mutex_t map_mutex = PTHREAD_MUTEX_INITIALIZER;
 Object p1;
@@ -41,7 +41,11 @@ Object foods[NUM_OF_FOOD];
 Object obstructions[NUM_OF_OBSTRUCTION];
 Object monsters[NUM_OF_MONSTER];
 Object powers[NUM_OF_POWER];
+pthread_t mm, pt;
 
+bool game_pause = false;
+
+int center_z = 0;
 int smallest_z = 0;
 int largest_z = 0;
 int num_food = 0;
@@ -82,20 +86,19 @@ bool set_object(Object *o, int x, int y) {
 
   if (new_pos > largest_z || new_pos < smallest_z) return false;
 
-  if (map[new_pos] == NULL) {
+  if (map[new_pos] == NULL) { // Object placement
     map[new_pos] = o;
-    if (o->t == PLAYER || o->t == MONSTER) map[old_pos] = NULL;
+    if (o->t == PLAYER || o->t == MONSTER) map[old_pos] = NULL; // Moving objects
     return true;
-  } else if (o->t == PLAYER && map[new_pos]->t == FOOD) {
+  } else if (o->t == PLAYER && map[new_pos]->t == FOOD) { // Player gaining food
     map[new_pos] = o;
     map[old_pos] = NULL;
     num_food--;
     return true;
-    // player + 1 food
-  } else if (o->t == PLAYER && map[new_pos]->t == POWER) {
+  } else if (o->t == PLAYER && map[new_pos]->t == POWER) { // Player getting power up
     map[new_pos] = o;
     map[old_pos] = NULL;
-    pthread_mutex_lock(&power_mutex);
+    pthread_mutex_lock(&power_mutex); // Start timer
     power_enabled = true;
     pthread_mutex_unlock(&power_mutex);
     pthread_cond_signal(&power_cond);
@@ -203,6 +206,16 @@ void *power_timer(void *arg) {
 
 void init_game() {
 
+	// Initialize objects
+  map = calloc(max_x * max_y, sizeof(Object *));
+  perimeter = malloc(((2 * max_x) + (2 * max_y)) * sizeof(Object));
+
+	// Initialize threads
+  int t1 = 1;
+  int t2 = 2;
+  pthread_create(&mm, NULL, moving_monster, &t1);
+  pthread_create(&pt, NULL, power_timer, &t2);
+
   // Initialize player start
   p1.t = PLAYER;
   p1.p.x = 2;
@@ -283,28 +296,64 @@ void init_game() {
   }
 }
 
+void show_pause() {
+
+		int x_offset = 12;
+		int y_offset = 3;
+
+		int c_x = max_x/2;
+		int c_y = max_y/2;
+    mvprintw(c_y, c_x, ".");
+		int ltc_x = c_x-x_offset;
+		int ltc_y = c_y-y_offset;
+
+		int lbc_x = c_x-x_offset;
+		int lbc_y = c_y+y_offset;
+
+		int rtc_x = c_x+x_offset;
+		int rtc_y = c_y-y_offset;
+
+		int rbc_x = c_x+x_offset;
+		int rbc_y = c_y+y_offset;
+
+		for(int i = ltc_x; i < rtc_x; i++) mvprintw(ltc_y, i, "*");
+		for(int i = lbc_x; i < rbc_x; i++) mvprintw(lbc_y, i, "*");
+		for(int i = ltc_y; i < lbc_y; i++) mvprintw(i, ltc_x, "*");
+		for(int i = rtc_y; i < rbc_y; i++) mvprintw(i, rtc_x, "*");
+
+		while(1) {
+			int ch = getch();
+			clear();  // Clear the screen
+			draw_scene();
+			refresh();  // Update the screen
+		}
+}
+
+void pause_game() {
+  nodelay(stdscr, FALSE);  // block
+	show_pause();
+}
+
+void resume_game() {
+  nodelay(stdscr, TRUE);  // unblock
+	game_pause = false;
+}
+
 int main() {
   initscr();             // Initialize ncurses
   cbreak();              // Line buffering disabled
   noecho();              // Don't echo input characters
   keypad(stdscr, TRUE);  // Enable special keys
   curs_set(0);           // Hide cursor
-
-  nodelay(stdscr, TRUE);  // makes getch non-blocking
   srand(time(NULL));
   getmaxyx(stdscr, max_y, max_x);
-  map = calloc(max_x * max_y, sizeof(Object *));
-  perimeter = malloc(((2 * max_x) + (2 * max_y)) * sizeof(Object));
+	center_z = flatten(max_x/2, max_y/2);
   largest_z = flatten(max_x, max_y);
-  pthread_t mm, pt;
-  int t1 = 1;
-  int t2 = 2;
 
   init_game();
-  pthread_create(&mm, NULL, moving_monster, &t1);
-  pthread_create(&pt, NULL, power_timer, &t2);
 
   bool exit_game = false;
+  nodelay(stdscr, TRUE);  // makes getch non-blocking
   while (!exit_game) {  // Game loop, exit on 'q'
     int ch = getch();
     clear();  // Clear the screen
@@ -323,6 +372,10 @@ int main() {
         break;
       case KEY_RIGHT:
         if (set_object(&p1, p1.p.x + 1, p1.p.y)) p1.p.x++;
+        break;
+      case ' ': // Pause game
+				if(!game_pause) pause_game();
+				else resume_game();
         break;
       case 'q':
         exit_game = true;
