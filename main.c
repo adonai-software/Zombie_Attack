@@ -44,6 +44,7 @@ Object powers[NUM_OF_POWER];
 pthread_t mm, pt;
 
 bool game_pause = false;
+bool exit_game = false;
 
 int center_z = 0;
 int smallest_z = 0;
@@ -158,50 +159,58 @@ void draw_scene() {
 }
 
 void *moving_monster(void *arg) {
-  while (1) {
-    pthread_mutex_lock(&map_mutex);
-    int new_x_pos, new_y_pos;
-    for (int i = 0; i < NUM_OF_MONSTER; i++) {
-      // Random movement
-      // int new_x_pos = rand()%2==0 ? monsters[i].p.x+1 : monsters[i].p.x-1;
-      // int new_y_pos = rand()%2==0 ? monsters[i].p.y+1 : monsters[i].p.y-1;
-      // Inteligent movement
+	if(!game_pause && !exit_game) {
+		while (1) {
+			pthread_mutex_lock(&map_mutex);
+			int new_x_pos, new_y_pos;
+			for (int i = 0; i < NUM_OF_MONSTER; i++) {
+				// Random movement
+				// int new_x_pos = rand()%2==0 ? monsters[i].p.x+1 : monsters[i].p.x-1;
+				// int new_y_pos = rand()%2==0 ? monsters[i].p.y+1 : monsters[i].p.y-1;
+				// Inteligent movement
 
-      
-      if(!power_enabled) {
-        new_x_pos =
-            monsters[i].p.x > p1.p.x ? monsters[i].p.x - 1 : monsters[i].p.x + 1;
-        new_y_pos =
-            monsters[i].p.y > p1.p.y ? monsters[i].p.y - 1 : monsters[i].p.y + 1;
-      } else {
-        new_x_pos =
-            monsters[i].p.x > p1.p.x ? monsters[i].p.x + 1 : monsters[i].p.x - 1;
-        new_y_pos =
-            monsters[i].p.y > p1.p.y ? monsters[i].p.y + 1 : monsters[i].p.y - 1;
+				
+				if(!power_enabled) {
+					new_x_pos =
+							monsters[i].p.x > p1.p.x ? monsters[i].p.x - 1 : monsters[i].p.x + 1;
+					new_y_pos =
+							monsters[i].p.y > p1.p.y ? monsters[i].p.y - 1 : monsters[i].p.y + 1;
+				} else {
+					new_x_pos =
+							monsters[i].p.x > p1.p.x ? monsters[i].p.x + 1 : monsters[i].p.x - 1;
+					new_y_pos =
+							monsters[i].p.y > p1.p.y ? monsters[i].p.y + 1 : monsters[i].p.y - 1;
 
-      }
+				}
 
-      if (set_object(&monsters[i], new_x_pos, new_y_pos)) {
-        monsters[i].p.x = new_x_pos;
-        monsters[i].p.y = new_y_pos;
-      }
-    }
-    pthread_mutex_unlock(&map_mutex);
+				if (set_object(&monsters[i], new_x_pos, new_y_pos)) {
+					monsters[i].p.x = new_x_pos;
+					monsters[i].p.y = new_y_pos;
+				}
+			}
+			pthread_mutex_unlock(&map_mutex);
 
-    usleep(200000);
-  }
+			usleep(200000);
+		}
+	} else {
+			usleep(1000000);
+	}
 
   return NULL;
 }
 
 void *power_timer(void *arg) {
-  while(1) {
-    pthread_mutex_lock(&power_mutex);
-    pthread_cond_wait(&power_cond, &power_mutex);
-    usleep(5000000); // 5 seconds
-    power_enabled = false;
-    pthread_mutex_unlock(&power_mutex);
-  }
+	if(!game_pause && !exit_game) {
+		while(1) {
+			pthread_mutex_lock(&power_mutex);
+			pthread_cond_wait(&power_cond, &power_mutex);
+			usleep(5000000); // 5 seconds
+			power_enabled = false;
+			pthread_mutex_unlock(&power_mutex);
+		}
+	} else {
+			usleep(1000000); // 5 seconds
+	}
 }
 
 void init_game() {
@@ -296,7 +305,11 @@ void init_game() {
   }
 }
 
-void show_pause() {
+void pause_game() {
+
+		nodelay(stdscr, FALSE);  // block
+		game_pause = true;
+		pthread_mutex_lock(&map_mutex);
 
 		int x_offset = 12;
 		int y_offset = 3;
@@ -304,6 +317,7 @@ void show_pause() {
 		int c_x = max_x/2;
 		int c_y = max_y/2;
     mvprintw(c_y, c_x, ".");
+
 		int ltc_x = c_x-x_offset;
 		int ltc_y = c_y-y_offset;
 
@@ -321,22 +335,24 @@ void show_pause() {
 		for(int i = ltc_y; i < lbc_y; i++) mvprintw(i, ltc_x, "*");
 		for(int i = rtc_y; i < rbc_y; i++) mvprintw(i, rtc_x, "*");
 
-		while(1) {
+    mvprintw(c_y, c_x-4, "Paused");
+
+		while(game_pause) {
 			int ch = getch();
+			switch (ch) {
+				case ' ':
+					nodelay(stdscr, TRUE);  // unblock
+					game_pause = false;
+					pthread_mutex_unlock(&map_mutex);
+					break;
+				default:
+					break;
+			}
 			clear();  // Clear the screen
 			draw_scene();
 			refresh();  // Update the screen
+			usleep(20000);
 		}
-}
-
-void pause_game() {
-  nodelay(stdscr, FALSE);  // block
-	show_pause();
-}
-
-void resume_game() {
-  nodelay(stdscr, TRUE);  // unblock
-	game_pause = false;
 }
 
 int main() {
@@ -352,7 +368,6 @@ int main() {
 
   init_game();
 
-  bool exit_game = false;
   nodelay(stdscr, TRUE);  // makes getch non-blocking
   while (!exit_game) {  // Game loop, exit on 'q'
     int ch = getch();
@@ -373,24 +388,28 @@ int main() {
       case KEY_RIGHT:
         if (set_object(&p1, p1.p.x + 1, p1.p.y)) p1.p.x++;
         break;
-      case ' ': // Pause game
-				if(!game_pause) pause_game();
-				else resume_game();
-        break;
+      case ' ': // Pause/Resume game
+				pthread_mutex_unlock(&map_mutex);
+				pause_game();
+				break;
       case 'q':
         exit_game = true;
+				pthread_mutex_unlock(&map_mutex);
+				break;
       default:
         break;
     }
-    pthread_mutex_unlock(&map_mutex);
 
-    mvprintw(0, 0, "Position (%d,%d) max_x=%d,max_y=%d", p1.p.x, p1.p.y, max_x,
-             max_y);
-    mvprintw(0, max_x - 20, "%s %d", "food remaining = ", num_food);
-    mvprintw(0, max_x - 50, "%s %d", "lives remaining = ", num_lives);
-    draw_scene();
-    refresh();  // Update the screen
-    usleep(5000);
+		if(!game_pause && !exit_game) {
+			pthread_mutex_unlock(&map_mutex);
+			mvprintw(0, 0, "Position (%d,%d) max_x=%d,max_y=%d", p1.p.x, p1.p.y, max_x,
+							 max_y);
+			mvprintw(0, max_x - 20, "%s %d", "food remaining = ", num_food);
+			mvprintw(0, max_x - 50, "%s %d", "lives remaining = ", num_lives);
+			draw_scene();
+			refresh();  // Update the screen
+			usleep(5000);
+		}
   }
 
   pthread_join(pt, NULL);
