@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <string.h>
 
 #define NUM_OF_OBSTRUCTION 50
 #define NUM_OF_MONSTER 10
@@ -14,9 +15,23 @@
         - Write unflatten function [x]
         - Add perimeter [x]
         - Make monsters move [x]
-        - start menu
-        - Add Pause and banner middle
+        - Add Pause and banner middle [x]
+        - start menu [x]
+        - start menu items
+				- quit gracefully
 */
+
+static const char *menu_items[] = {
+	"Start",
+	"Settings",
+	"High Scores",
+	"About",
+	"Quit"
+};
+
+static const int n_items = sizeof(menu_items)/sizeof(menu_items[0]);
+
+typedef enum { START, SETTINGS, HIGH_SCORES, ABOUT, QUIT } Menu;
 
 int max_x, max_y;
 
@@ -56,6 +71,94 @@ pthread_mutex_t power_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t power_cond = PTHREAD_COND_INITIALIZER;
 
 int flatten(int x, int y) { return y == 1 ? x : ((y - 1) * max_x) + x; }
+
+void draw_rectangle(char **items, int n_items, int highlight) {
+
+	int max_len = 0, x_offset = 0, y_offset = 0;
+
+	max_len = strlen(items[0]);
+	for(int i = 1; i < n_items; i++) {
+		max_len = strlen(items[i]) > max_len ? strlen(items[i]) : max_len;
+	}
+	
+	x_offset = max_len+2;
+	y_offset = n_items+2;
+
+
+	int c_x = max_x/2;
+	int c_y = max_y/2;
+	//mvprintw(c_y, c_x, "."); For Debugging Center
+
+	int ltc_x = c_x-x_offset;
+	int ltc_y = c_y-y_offset;
+
+	int lbc_x = c_x-x_offset;
+	int lbc_y = c_y+y_offset;
+
+	int rtc_x = c_x+x_offset;
+	int rtc_y = c_y-y_offset;
+
+	int rbc_x = c_x+x_offset;
+	int rbc_y = c_y+y_offset;
+
+	for(int i = ltc_x; i < rtc_x; i++) mvprintw(ltc_y, i, "*");
+	for(int i = lbc_x; i < rbc_x; i++) mvprintw(lbc_y, i, "*");
+	for(int i = ltc_y; i < lbc_y; i++) mvprintw(i, ltc_x, "*");
+	for(int i = rtc_y; i < rbc_y; i++) mvprintw(i, rtc_x, "*");
+
+	if(n_items > 1) {
+		int item_x = ltc_x+2; 
+		int item_y = ltc_y+2;
+		for (int i = 0;i < n_items; i++) {
+			if(highlight == i) attron(A_REVERSE);
+			mvprintw(item_y, item_x, "%s", items[i]);
+			if(highlight == i) attroff(A_REVERSE);
+			item_y += 2;
+		}
+	} else {
+		mvprintw(ltc_y+((lbc_y-ltc_y)/2), ltc_x+2, "%s", items[0]);
+	}
+
+}
+
+void draw_menu() {
+
+	clear();
+	Menu selection = START;
+	bool selected = false;
+	while(!selected) {
+		draw_rectangle(menu_items, n_items, selection);
+		int ch = getch();
+		switch(ch) {
+			case KEY_DOWN:
+				selection = selection < n_items-1 ? selection+1 : selection;;
+				break;
+			case KEY_UP:
+				selection = selection > 0 ? selection-1 : selection;
+				break;
+			case KEY_ENTER:
+			case '\n':
+				selected = true;
+				switch (selection) {
+					case START:
+						mvprintw(0,0,"Starting game...");		
+						break;
+					case SETTINGS:
+						mvprintw(0,0,"Display game settings...");		
+						break;
+					case HIGH_SCORES:
+						mvprintw(0,0,"Display high scores...");		
+						break;
+					case ABOUT: // Implement
+					case QUIT:
+						break;
+				}
+				break;
+			defalt:
+				break;
+		}
+	}
+}
 
 Point unflatten(int z) {
   Point p;
@@ -108,7 +211,10 @@ bool set_object(Object *o, int x, int y) {
              (o->t == PLAYER && map[new_pos]->t == MONSTER)) {
     num_lives--;
     clear();  // Clear the screen
-    mvprintw(10, 10, "%s", "Ouch!");
+		char **str_a[1];
+		char str[] = "Ouch!";
+		str_a[0] = str;
+		draw_rectangle(str_a, 1, 0);
     usleep(1500000);
     return false;
   }
@@ -149,12 +255,18 @@ void draw_scene() {
 
   if (num_food <= 0) {
     clear();  // Clear the screen
-    mvprintw(10, 10, "%s", "Winner!");
+		char **str_a[1];
+		char str[] = "You Win!";
+		str_a[0] = str;
+		draw_rectangle(str_a, 1, 0);
   }
 
   if (num_lives < 1) {
     clear();  // Clear the screen
-    mvprintw(10, 10, "%s", "You Lose!");
+		char **str_a[1];
+		char str[] = "You Lose!";
+		str_a[0] = str;
+		draw_rectangle(str_a, 1, 0);
   }
 }
 
@@ -311,31 +423,13 @@ void pause_game() {
 		game_pause = true;
 		pthread_mutex_lock(&map_mutex);
 
-		int x_offset = 12;
-		int y_offset = 3;
+		char *items[1];
+		char *pause_str = "Pause";
+		items[0] = pause_str;
+		
 
-		int c_x = max_x/2;
-		int c_y = max_y/2;
-    mvprintw(c_y, c_x, ".");
+		draw_rectangle(items, 1, -1);
 
-		int ltc_x = c_x-x_offset;
-		int ltc_y = c_y-y_offset;
-
-		int lbc_x = c_x-x_offset;
-		int lbc_y = c_y+y_offset;
-
-		int rtc_x = c_x+x_offset;
-		int rtc_y = c_y-y_offset;
-
-		int rbc_x = c_x+x_offset;
-		int rbc_y = c_y+y_offset;
-
-		for(int i = ltc_x; i < rtc_x; i++) mvprintw(ltc_y, i, "*");
-		for(int i = lbc_x; i < rbc_x; i++) mvprintw(lbc_y, i, "*");
-		for(int i = ltc_y; i < lbc_y; i++) mvprintw(i, ltc_x, "*");
-		for(int i = rtc_y; i < rbc_y; i++) mvprintw(i, rtc_x, "*");
-
-    mvprintw(c_y, c_x-4, "Paused");
 
 		while(game_pause) {
 			int ch = getch();
@@ -366,7 +460,9 @@ int main() {
 	center_z = flatten(max_x/2, max_y/2);
   largest_z = flatten(max_x, max_y);
 
-  init_game();
+	draw_menu();
+
+	init_game();
 
   nodelay(stdscr, TRUE);  // makes getch non-blocking
   while (!exit_game) {  // Game loop, exit on 'q'
@@ -412,6 +508,7 @@ int main() {
 		}
   }
 
+	// BUG - game not ending gracefully, freezes
   pthread_join(pt, NULL);
   pthread_join(mm, NULL);
 
