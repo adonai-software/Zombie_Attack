@@ -153,6 +153,13 @@ Point unflatten(int z) {
   return p;
 }
 
+void deter_monsters() {
+    pthread_mutex_lock(&power_mutex);  // Start timer
+    power_enabled = true;
+    pthread_mutex_unlock(&power_mutex);
+    pthread_cond_signal(&power_cond);
+}
+
 bool set_object(Object* o, int x, int y) {
   int new_pos = flatten(x, y);
   int old_pos = flatten(o->p.x, o->p.y);
@@ -174,10 +181,7 @@ bool set_object(Object* o, int x, int y) {
              map[new_pos]->t == POWER) {  // Player getting power up
     map[new_pos] = o;
     map[old_pos] = NULL;
-    pthread_mutex_lock(&power_mutex);  // Start timer
-    power_enabled = true;
-    pthread_mutex_unlock(&power_mutex);
-    pthread_cond_signal(&power_cond);
+		deter_monsters();
     return true;
   } else if ((o->t == MONSTER && map[new_pos]->t == PLAYER) ||
              (o->t == PLAYER && map[new_pos]->t == MONSTER)) {
@@ -187,7 +191,8 @@ bool set_object(Object* o, int x, int y) {
     char str[] = "Ouch!";
     str_a[0] = str;
     draw_rec_center(str_a, 1, -1);
-    usleep(1500000);
+		deter_monsters(); // Gives time for player to move - improve
+    usleep(1000000);
     return false;
   }
 
@@ -570,7 +575,7 @@ void display_menu() {
 }
 
 void display_banner() {
-  char* game_title = "Zombie Killer!";
+  char* game_title = "Zombie Attack!";
   char** str_arr[] = {game_title};
   draw_rec_center(str_arr, 1, -1);
   int c = getch();
