@@ -16,8 +16,13 @@
         - Add perimeter [x]
         - Make monsters move [x]
         - Add Pause and banner middle [x]
-        - start menu [x]
-        - start menu items
+        - start menu [\]
+					- Start [x]
+					- Settings
+					- High Scores
+					- About [\]
+					- Quit [x]
+				- Game Banner [\]
 				- quit gracefully
 */
 
@@ -72,7 +77,11 @@ pthread_cond_t power_cond = PTHREAD_COND_INITIALIZER;
 
 int flatten(int x, int y) { return y == 1 ? x : ((y - 1) * max_x) + x; }
 
-void draw_rectangle(char **items, int n_items, int highlight) {
+// BUG - draws dimensions depending on biggest string
+// possible string bigger than available area
+// - word wrapping?
+// - words are left aligned, center align?
+void draw_rec(char **items, int n_items, int highlight, int x_pos, int y_pos) {
 
 	int max_len = 0, x_offset = 0, y_offset = 0;
 
@@ -84,9 +93,8 @@ void draw_rectangle(char **items, int n_items, int highlight) {
 	x_offset = max_len+2;
 	y_offset = n_items+2;
 
-
-	int c_x = max_x/2;
-	int c_y = max_y/2;
+	int c_x = x_pos;
+	int c_y = y_pos;
 	//mvprintw(c_y, c_x, "."); For Debugging Center
 
 	int ltc_x = c_x-x_offset;
@@ -107,57 +115,25 @@ void draw_rectangle(char **items, int n_items, int highlight) {
 	for(int i = rtc_y; i < rbc_y; i++) mvprintw(i, rtc_x, "*");
 
 	if(n_items > 1) {
-		int item_x = ltc_x+2; 
+		int item_x = ltc_x; 
 		int item_y = ltc_y+2;
 		for (int i = 0;i < n_items; i++) {
+			int x_margin = ((rtc_x-ltc_x)-strlen(items[i]))/2;
 			if(highlight == i) attron(A_REVERSE);
-			mvprintw(item_y, item_x, "%s", items[i]);
+			mvprintw(item_y, item_x+x_margin, "%s", items[i]);
 			if(highlight == i) attroff(A_REVERSE);
 			item_y += 2;
 		}
 	} else {
-		mvprintw(ltc_y+((lbc_y-ltc_y)/2), ltc_x+2, "%s", items[0]);
+		int x_margin = ((rtc_x-ltc_x)-strlen(items[0]))/2;
+		mvprintw(ltc_y+((lbc_y-ltc_y)/2), ltc_x+x_margin, "%s", items[0]);
 	}
 
 }
 
-void draw_menu() {
-
-	clear();
-	Menu selection = START;
-	bool selected = false;
-	while(!selected) {
-		draw_rectangle(menu_items, n_items, selection);
-		int ch = getch();
-		switch(ch) {
-			case KEY_DOWN:
-				selection = selection < n_items-1 ? selection+1 : selection;;
-				break;
-			case KEY_UP:
-				selection = selection > 0 ? selection-1 : selection;
-				break;
-			case KEY_ENTER:
-			case '\n':
-				selected = true;
-				switch (selection) {
-					case START:
-						mvprintw(0,0,"Starting game...");		
-						break;
-					case SETTINGS:
-						mvprintw(0,0,"Display game settings...");		
-						break;
-					case HIGH_SCORES:
-						mvprintw(0,0,"Display high scores...");		
-						break;
-					case ABOUT: // Implement
-					case QUIT:
-						break;
-				}
-				break;
-			defalt:
-				break;
-		}
-	}
+// Wrapper to draw in center
+void draw_rec_center(char **items, int n_items, int highlight) {
+	draw_rec(items, n_items, highlight, max_x/2, max_y/2);
 }
 
 Point unflatten(int z) {
@@ -214,7 +190,7 @@ bool set_object(Object *o, int x, int y) {
 		char **str_a[1];
 		char str[] = "Ouch!";
 		str_a[0] = str;
-		draw_rectangle(str_a, 1, 0);
+		draw_rec_center(str_a, 1, -1);
     usleep(1500000);
     return false;
   }
@@ -258,7 +234,7 @@ void draw_scene() {
 		char **str_a[1];
 		char str[] = "You Win!";
 		str_a[0] = str;
-		draw_rectangle(str_a, 1, 0);
+		draw_rec_center(str_a, 1, -1);
   }
 
   if (num_lives < 1) {
@@ -266,7 +242,7 @@ void draw_scene() {
 		char **str_a[1];
 		char str[] = "You Lose!";
 		str_a[0] = str;
-		draw_rectangle(str_a, 1, 0);
+		draw_rec_center(str_a, 1, -1);
   }
 }
 
@@ -418,7 +394,6 @@ void init_game() {
 }
 
 void pause_game() {
-
 		nodelay(stdscr, FALSE);  // block
 		game_pause = true;
 		pthread_mutex_lock(&map_mutex);
@@ -428,7 +403,7 @@ void pause_game() {
 		items[0] = pause_str;
 		
 
-		draw_rectangle(items, 1, -1);
+		draw_rec_center(items, 1, -1);
 
 
 		while(game_pause) {
@@ -449,21 +424,13 @@ void pause_game() {
 		}
 }
 
-int main() {
-  initscr();             // Initialize ncurses
-  cbreak();              // Line buffering disabled
-  noecho();              // Don't echo input characters
-  keypad(stdscr, TRUE);  // Enable special keys
-  curs_set(0);           // Hide cursor
-  srand(time(NULL));
-  getmaxyx(stdscr, max_y, max_x);
-	center_z = flatten(max_x/2, max_y/2);
-  largest_z = flatten(max_x, max_y);
-
-	draw_menu();
-
-	init_game();
-
+/*
+* @brief main game function
+* @description
+*	@params none
+*	@return none
+*/
+void start_game() {
   nodelay(stdscr, TRUE);  // makes getch non-blocking
   while (!exit_game) {  // Game loop, exit on 'q'
     int ch = getch();
@@ -511,6 +478,89 @@ int main() {
 	// BUG - game not ending gracefully, freezes
   pthread_join(pt, NULL);
   pthread_join(mm, NULL);
+}
+
+void display_about() {
+	clear();
+	char *title = "About";
+	char *border = "============================";
+	char *info1 = "Capture all foods (*) without losing all lives.";
+	char *info2 = "* = Food";
+	char *info3 = "M = Monster";
+	char *info4 = "P = Power ups";
+	int n_items = 6;
+	char *items[6] = {title, border, info1, info2, info3, info4};
+	draw_rec_center(items, n_items, -1);
+}
+
+/*
+* @brief displays startup menu and controls selection
+* @description
+*	@params none
+*	@return none
+*/
+void display_menu() {
+
+	Menu selection = START;
+	bool selected = false;
+	while(!selected) {
+		clear();
+		draw_rec_center(menu_items, n_items, selection);
+		int ch = getch();
+		switch(ch) {
+			case KEY_DOWN:
+				selection = selection < n_items-1 ? selection+1 : selection;;
+				break;
+			case KEY_UP:
+				selection = selection > 0 ? selection-1 : selection;
+				break;
+			case KEY_ENTER:
+			case '\n':
+				switch (selection) {
+					case START:
+						init_game();
+						start_game();
+						break;
+					case SETTINGS:
+						mvprintw(0,0,"Display game settings...");		
+						break;
+					case HIGH_SCORES:
+						mvprintw(0,0,"Display high scores...");		
+						break;
+					case ABOUT: 
+						display_about();
+						getch();
+						break;
+					case QUIT:
+						break;
+				}
+				break;
+			defalt:
+				break;
+		}
+	}
+}
+
+void display_banner() {
+	char *game_title = "Zombie Killer!";
+	char **str_arr[] = {game_title};
+	draw_rec_center(str_arr, 1, -1);
+	int c = getch();
+}
+
+int main() {
+  initscr();             // Initialize ncurses
+  cbreak();              // Line buffering disabled
+  noecho();              // Don't echo input characters
+  keypad(stdscr, TRUE);  // Enable special keys
+  curs_set(0);           // Hide cursor
+  srand(time(NULL));
+  getmaxyx(stdscr, max_y, max_x);
+	center_z = flatten(max_x/2, max_y/2);
+  largest_z = flatten(max_x, max_y);
+
+	display_banner();
+	display_menu();
 
   endwin();  // Clean up ncurses
   return 0;
