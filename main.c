@@ -5,11 +5,69 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+// need to add json header file 
+#include <cjson/cJSON.h> // note this is different from regualr json, make sure to install cjson to work
 
-#define NUM_OF_OBSTRUCTION 50
-#define NUM_OF_MONSTER 10
-#define NUM_OF_FOOD 5
-#define NUM_OF_POWER 2
+// need to add json file that updates these macros
+int NUM_OF_OBSTRUCTION = 50; 
+int NUM_OF_MONSTER = 10;
+int NUM_OF_FOOD = 5;
+int NUM_OF_POWER = 2;
+
+// need function to read JSON file
+void load_JSON_Difficulty(const char* filename, const char* difficulty) {
+  FILE* file = fopen(filename, "r");
+    if (!file) {
+      printf("JSON file did not open\n"); // testing to see if JSON file opens
+      exit(1);
+    }
+
+    // Reading JSON file
+    fseek(file, 0, SEEK_END); // traverses through the entire JSON file and marks pointer to the end
+    long length = ftell(file); // takes the current pointer location to determine file length
+    fseek(file, 0, SEEK_SET); // sets the pointer back to the beginning of file
+
+    // Making dynamically allocated space
+    char* data_values = malloc(length+1); // remember to deallocate memory
+      if(!data_values) {
+        printf("Dynamic space not made\n"); // testing to see if memory allocation works or not
+        fclose(file); // housekeeping 
+        exit(1);
+      }
+
+    // reading JSON file to newly made memory
+    fread(data_values, 1, length, file);
+    fclose(file); // housekeeping
+    data_values[length] = '\0'; // adds null terminator needed for CJSON pre-defined functions
+
+    // Parsing data values
+    cJSON* head = cJSON_Parse(data_values); // marks head of object tree
+      if(!head) {
+        printf("JSON parsing didn't work\n"); // making sure object tree exists
+        free(data_values);
+        exit(1); 
+      }
+
+    // extracting certain object from tree
+    cJSON* mode = cJSON_GetObjectItemCaseSensitive(head, difficulty);
+      if(!mode) {
+        printf("Difficulty not found\n"); //checking to see if mode is found in JSON file
+        cJSON_Delete(head);
+        free(data_values);
+        exit(1);
+      }
+    // updating global macros (TODO MAKE SURE TO MAKE VARIABLE TYPE) TODO Check if JSON file is correct format
+    NUM_OF_OBSTRUCTION = cJSON_GetObjectItemCaseSensitive(mode, "NUM_OF_OBSTRUCTION")->valueint;
+    NUM_OF_MONSTER = cJSON_GetObjectItemCaseSensitive(mode, "NUM_OF_MONSTER")->valueint;
+    NUM_OF_FOOD = cJSON_GetObjectItemCaseSensitive(mode, "NUM_OF_FOOD")->valueint;
+    NUM_OF_POWER = cJSON_GetObjectItemCaseSensitive(mode, "NUM_OF_POWER")->valueint;
+
+    cJSON_Delete(head); // housekeeping
+    free(data_values);
+}
+
+// end of JSON file
+
 /* TODO
         - Convert int x,y into struct Point [x]
         - Write unflatten function [x]
@@ -27,11 +85,19 @@
 */
 
 static const char* menu_items[] = {"Start", "Settings", "High Scores", "About",
-                                   "Quit"};
+                                   "Quit", "Difficulty"}; // Added Difficulty
 
 static const int n_items = sizeof(menu_items) / sizeof(menu_items[0]);
 
-typedef enum { START, SETTINGS, HIGH_SCORES, ABOUT, QUIT } Menu;
+typedef enum { START, SETTINGS, HIGH_SCORES, ABOUT, QUIT, DIFFICULTY } Menu; // Added Difficulty
+
+// new added difficulty UI
+static const char* mode_levels[] = {"Easy", "Medium", "Hard", "Insane"};
+static const int n_modes = sizeof(mode_levels) / sizeof(mode_levels[0]);
+
+typedef enum {EASY, MEDIUM, HARD, INSANE} Mode;
+
+// end of new added difficulty UI
 
 int max_x, max_y;
 
@@ -52,10 +118,10 @@ Object** map = {NULL};
 pthread_mutex_t map_mutex = PTHREAD_MUTEX_INITIALIZER;
 Object p1;
 Object* perimeter;
-Object foods[NUM_OF_FOOD];
-Object obstructions[NUM_OF_OBSTRUCTION];
-Object monsters[NUM_OF_MONSTER];
-Object powers[NUM_OF_POWER];
+Object* foods = NULL; // from Object foods[NUM_OF_FOOD];
+Object* obstructions = NULL; // from Object obstructions[NUM_OF_OBSTRUCTION];
+Object* monsters = NULL; // from Object monsters[NUM_OF_MONSTER];
+Object* powers = NULL; // from Object powers[NUM_OF_POWER];
 pthread_t mm, pt;
 
 bool game_pause = false;
@@ -301,8 +367,45 @@ void* power_timer(void* arg) {
     usleep(1000000);  // 5 seconds
   }
 }
+// adding allocation for verying difficulty
+  void allocate_game_arrays() {
+  foods = malloc(NUM_OF_FOOD * sizeof(Object));
+  obstructions = malloc(NUM_OF_OBSTRUCTION * sizeof(Object));
+  monsters = malloc(NUM_OF_MONSTER * sizeof(Object));
+  powers = malloc(NUM_OF_POWER * sizeof(Object));
+  
+  if (!foods || !obstructions || !monsters || !powers) {
+    printf("New game arrays not allocated dynamically.\n"); //checking to see if it made allocated space
+    exit(1);
+  }
+}
+// end of adding new allocation
+
+// cleaning up memory from previous function
+
+void deallocate_game_arrays() {
+  free(foods);
+  free(obstructions);
+  free(monsters);
+  free(powers);
+
+  foods = NULL; // housekeeping
+  obstructions = NULL;
+  monsters = NULL;
+  powers = NULL;
+}
+
+// end of new cleanup
 
 void init_game() {
+// cleaning up previos memory allocations just in case
+if (foods != NULL || obstructions != NULL || monsters != NULL || powers != NULL) {
+  deallocate_game_arrays();
+}
+
+// new adding memory allocation for diffierent difficulties
+allocate_game_arrays(); // will run default settings, and update if new difficulty is included
+
   // Initialize objects
   map = calloc(max_x * max_y, sizeof(Object*));
   perimeter = malloc(((2 * max_x) + (2 * max_y)) * sizeof(Object));
@@ -476,6 +579,8 @@ void start_game() {
   // BUG - game not ending gracefully, freezes
   pthread_join(pt, NULL);
   pthread_join(mm, NULL);
+
+  deallocate_game_arrays();
 }
 
 void display_high_scores() {
@@ -529,6 +634,54 @@ void display_about() {
  *	@params none
  *	@return none
  */
+
+ // todo Difficulty UI
+void display_difficulty() {
+  Mode selection = EASY;
+  bool selected = false;
+  while (!selected) {
+    clear();
+    draw_rec_center(mode_levels, n_modes, selection);
+    int ch = getch();
+    switch (ch) {
+      case KEY_DOWN:
+        selection = selection < n_modes - 1 ? selection + 1 : selection;
+        ;
+        break;
+      case KEY_UP:
+        selection = selection > 0 ? selection - 1 : selection;
+        break;
+      case KEY_ENTER:
+      case '\n':
+        switch (selection) {
+          case EASY:
+            // todo select easy
+            load_JSON_Difficulty("macros.json", "easy");
+            break;
+          case MEDIUM:
+            // todo select medium
+            load_JSON_Difficulty("macros.json", "medium");
+            break;
+          case HARD:
+            // todo select hard
+            load_JSON_Difficulty("macros.json", "hard");
+            break;
+          case INSANE:
+            // todo select insane
+            load_JSON_Difficulty("macros.json", "insane");
+            break;
+        }
+        selected = true; // backs out if player selects a difficulty
+        break;
+      defalt:
+        break;
+    }
+    refresh();
+  }
+}
+
+// end of Difficulty UI (works visually)
+
 void display_menu() {
   Menu selection = START;
   bool selected = false;
@@ -566,6 +719,9 @@ void display_menu() {
           case QUIT:
             selected = true;
             break;
+          case DIFFICULTY:
+            display_difficulty();
+            break;
         }
         break;
       defalt:
@@ -580,6 +736,7 @@ void display_banner() {
   draw_rec_center(str_arr, 1, -1);
   int c = getch();
 }
+
 
 int main() {
   initscr();             // Initialize ncurses
