@@ -1,0 +1,29 @@
+{
+    "easy" : {
+        "NUM_OF_OBSTRUCTION": 50,
+        "NUM_OF_MONSTER": 10,
+        "NUM_OF_FOOD": 5,
+        "NUM_OF_POWER": 2
+    },
+
+    "medium" : {
+        "NUM_OF_OBSTRUCTION": 75,
+        "NUM_OF_MONSTER": 15,
+        "NUM_OF_FOOD": 4,
+        "NUM_OF_POWER": 2
+    },
+
+    "hard" : {
+        "NUM_OF_OBSTRUCTION": 100,
+        "NUM_OF_MONSTER": 20,
+        "NUM_OF_FOOD": 3,
+        "NUM_OF_POWER": 1
+    },
+
+    "insane" : {
+        "NUM_OF_OBSTRUCTION": 125,
+        "NUM_OF_MONSTER": 25,
+        "NUM_OF_FOOD": 2,
+        "NUM_OF_POWER": 1
+    }
+}
