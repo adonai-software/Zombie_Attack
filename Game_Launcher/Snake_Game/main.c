@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdbool.h>
+#include <string.h>
 
 /*
         TODO
@@ -36,8 +37,16 @@ vec2 body[MAX_SCORE + 1];
 vec2 dir = {1, 0};
 vec2 food;
 
+static const char* menu_items[] = {
+    "Start Game",
+    "Quit Game"
+};
+
+static const int n_items = sizeof(menu_items) / sizeof(menu_items[0]); 
+
 // declaring all functions to avoid future errors
-void display_menu(WINDOW* win);
+void display_menu();
+void draw_menu_box(const char** items, int n_items, int highlight, int x_pos, int y_pos);
 vec2 generate_food();
 void init_game();
 void restart_game();
@@ -48,47 +57,102 @@ void board_update();
 void draw();
 void game_over();
 
-void display_menu(WINDOW* win) {
-    int choice = 0;
-    int pressed;
+void draw_menu_box(const char** items, int n_items, int highlight, int x_pos, int y_pos) {
+    int max_len = 0;
     
-    while (true) {
-        erase();
+    // Find the longest menu item
+    for (int i = 0; i < n_items; i++) {
+        int len = strlen(items[i]);
+        if (len > max_len) max_len = len;
+    }
+    
+    int box_width = max_len + 6;
+    int box_height = n_items + 4;
+    
+    int start_x = x_pos - (box_width / 2);
+    int start_y = y_pos - (box_height / 2);
+    
+    // Draw border
+    for (int i = 0; i < box_width; i++) {
+        mvprintw(start_y, start_x + i, "*");
+        mvprintw(start_y + box_height - 1, start_x + i, "*");
+    }
+    
+    for (int i = 1; i < box_height - 1; i++) {
+        mvprintw(start_y + i, start_x, "*");
+        mvprintw(start_y + i, start_x + box_width - 1, "*");
         
-        mvprintw(8, 15, "SNAKE GAME");
-        mvprintw(9, 15, "==========");
-        
-        if (choice == 0) {
-            mvprintw(12, 15, "> Start Game"); // Arrow will show hovering 
-        } else {
-            mvprintw(12, 15, "  Start Game"); 
+        for (int j = 1; j < box_width - 1; j++) {
+            mvprintw(start_y + i, start_x + j, " ");
         }
+    }
+    
+    
+    mvprintw(start_y + 1, start_x + (box_width - 11) / 2, "SNAKE GAME");
+    
+    // Draw menu
+    for (int i = 0; i < n_items; i++) {
+        int item_x = start_x + 3;
+        int item_y = start_y + 3 + i;
         
-        if (choice == 1) {
-            mvprintw(13, 15, "> Quit Game"); // Arrow will show hovering 
+        if (highlight == i) {
+            attron(A_REVERSE);
+            mvprintw(item_y, item_x, "> %s", items[i]);
+            attroff(A_REVERSE);
         } else {
-            mvprintw(13, 15, "  Quit Game");
+            mvprintw(item_y, item_x, "  %s", items[i]);
         }
+    }
+}
+
+void display_menu() {
+    int selection = 0;
+    int quit = 0;
+    int max_x, max_y;
+    
+    getmaxyx(stdscr, max_y, max_x);
+    nodelay(win, false);
+    
+    while (!quit) {
+        clear();
+        
+        draw_menu_box(menu_items, n_items, selection, max_x / 2, max_y / 2);
+        
+        mvprintw(max_y - 3, 2, "Use arrows to navigate and press enter to select.");
         
         refresh();
         
-        pressed = wgetch(win);
-        
-        if (pressed == KEY_UP && choice > 0) {
-            choice--;
-        }
-        if (pressed == KEY_DOWN && choice < 1) {
-            choice++;
-        }
-        if (pressed == '\n') {
-            if (choice == 0) {
-                return;
-            } else {
+        int ch = wgetch(win);
+        switch (ch) {
+            case KEY_UP:
+                selection = (selection > 0) ? selection - 1 : n_items - 1;
+                break;
+            case KEY_DOWN:
+                selection = (selection < n_items - 1) ? selection + 1 : 0;
+                break;
+            case 10:  // Enter key (line feed)
+            case 13:  // Enter key (carriage return)
+            case KEY_ENTER:
+                switch (selection) {
+                    case 0: // Start Game
+                        quit = 1;
+                        break;
+                    case 1: // Quit Game
+                        endwin();
+                        exit(0);
+                        break;
+                }
+                break;
+            case 27: // esc key
+                quit = 1;
                 endwin();
                 exit(0);
-            }
+                break;
+            default:
+                break;
         }
     }
+    nodelay(win, true);
 }
 
 vec2 generate_food() {
@@ -179,7 +243,7 @@ void read_inputs() {
         dir.y = 1;
     } 
     if (pressed == 27) { // need to fix 
-        display_menu(win);
+        display_menu();
         if (!is_running) {
             restart_game();
         }
@@ -279,6 +343,7 @@ void game_over() {
     refresh();
     
     int pressed;
+    nodelay(win, false);
     while (!is_running) {
         pressed = wgetch(win);
         if (pressed == ' ') { // Space bar
@@ -286,7 +351,7 @@ void game_over() {
             break;
         }
         if (pressed == 27) { // ESC
-            display_menu(win);
+            display_menu();
             if (is_running) {
                 restart_game();
             }
@@ -294,11 +359,12 @@ void game_over() {
         }
         usleep(50000);
     }
+    nodelay(win,true);
 }
 
 int main() {
     init_game();
-    display_menu(win);
+    display_menu();
 
     while(true) {
         if (!is_running) {

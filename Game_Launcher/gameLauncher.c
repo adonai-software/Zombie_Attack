@@ -64,13 +64,13 @@ void draw_menu_box(const char** items, int n_items, int highlight, int x_pos, in
     
     // Draw border
     for (int i = 0; i < box_width; i++) {
-        mvprintw(start_y, start_x + i, "=");
-        mvprintw(start_y + box_height - 1, start_x + i, "=");
+        mvprintw(start_y, start_x + i, "*");
+        mvprintw(start_y + box_height - 1, start_x + i, "*");
     }
     
     for (int i = 1; i < box_height - 1; i++) {
-        mvprintw(start_y + i, start_x, "|");
-        mvprintw(start_y + i, start_x + box_width - 1, "|");
+        mvprintw(start_y + i, start_x, "*");
+        mvprintw(start_y + i, start_x + box_width - 1, "*");
         
         for (int j = 1; j < box_width - 1; j++) {
             mvprintw(start_y + i, start_x + j, " ");
@@ -125,7 +125,7 @@ void display_main_menu() {
         
         draw_menu_box(menu_items, n_items, selection, max_x / 2, max_y / 2);
         
-        mvprintw(max_y - 3, 2, "Use ↑↓ arrows to navigate and press enter to select mode.");
+        mvprintw(max_y - 3, 2, "Use arrows to navigate and press enter to select mode.");
         
         refresh();
         
